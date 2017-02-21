@@ -41,7 +41,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
 
+import static io.vertx.core.Future.future;
 import static io.vertx.test.core.TestUtils.*;
+import static org.hamcrest.CoreMatchers.is;
 
 /**
  *
@@ -3266,4 +3268,66 @@ public class Http1xTest extends HttpTest {
       server.close();
     }
   }
+
+  @Test
+  public void testCloseTheConnectionAfterShortRequestBody() throws Exception {
+    class Status {
+      static final String REQ = "1234567890";
+      static final String RES = "abcdefghijkl";
+      final Future<String> serverRequest = future();
+      final Future<Void> serverResponse = future();
+      final Future<Void> clientConnection = future();
+      final Future<Void> clientRequest = future();
+      final Future<String> clientResponse = future();
+
+      CompositeFuture all() {
+        return CompositeFuture.all(
+            serverRequest.map(s -> {assertThat(s, is(REQ));return null;}),
+            serverResponse,
+            clientConnection,
+            clientRequest,
+            clientResponse.map(s -> {assertThat(s, is(RES));return null;})
+        );
+      }
+
+      Future sendReq(int id) {
+        Future fut = future();
+        client.post(DEFAULT_HTTP_PORT, DEFAULT_HTTP_HOST, "/" + id,
+            res -> res.exceptionHandler(clientResponse::fail)
+                .bodyHandler(buf -> {
+                  clientResponse.complete(buf.toString());
+                  fut.complete();
+                }))
+            .exceptionHandler(clientRequest::fail)
+            .continueHandler(v -> clientRequest.fail("Unexpected 100 continue"))
+            .connectionHandler(c -> clientConnection.complete())
+            .endHandler(v -> clientRequest.complete())
+            .end(REQ);
+        return fut;
+      }
+    }
+
+    final Status[] ss = new Status[] { new Status(), new Status() };
+    server.requestHandler(req -> {
+      final HttpServerResponse res = req.response();
+      final int id = req.uri().charAt(1) - '0';
+      Status s = ss[id];
+      req.exceptionHandler(t -> s.serverRequest.fail(t))
+          .bodyHandler(buf -> s.serverRequest.complete(buf.toString()));
+      res.exceptionHandler(t -> s.serverResponse.fail(t))
+          .closeHandler(v -> s.serverResponse.fail("Server response premature close"))
+          .bodyEndHandler(v -> s.serverResponse.complete());
+      vertx.setTimer(300, l -> res.setStatusCode(200).end(s.RES));
+    });
+    server.listen(DEFAULT_HTTP_PORT, r -> ss[0].sendReq(0).setHandler(t -> ss[1].sendReq(1)));
+    waitFor(1);
+    CompositeFuture.all(ss[0].all(), ss[1].all()).setHandler(ar -> {
+      if(ar.failed()) {
+        fail(ar.cause());
+      }
+      testComplete();
+    });
+    await();
+  }
+
 }
