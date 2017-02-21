@@ -368,6 +368,7 @@ class ClientConnection extends ConnectionBase implements HttpClientConnection, H
       String responseConnectionHeader = currentResponse.getHeader(HttpHeaders.Names.CONNECTION);
       io.vertx.core.http.HttpVersion protocolVersion = client.getOptions().getProtocolVersion();
       String requestConnectionHeader = requestForResponse.headers().get(HttpHeaders.Names.CONNECTION);
+      boolean reqBodyIncomplete = requestForResponse.isReqBodyIncomplete();
       // We don't need to protect against concurrent changes on forceClose as it only goes from false -> true
       if (HttpHeaders.Values.CLOSE.equalsIgnoreCase(responseConnectionHeader) || HttpHeaders.Values.CLOSE.equalsIgnoreCase(requestConnectionHeader)) {
         // In all cases, if we have a close connection option then we SHOULD NOT treat the connection as persistent
@@ -375,6 +376,8 @@ class ClientConnection extends ConnectionBase implements HttpClientConnection, H
       } else if (protocolVersion == io.vertx.core.http.HttpVersion.HTTP_1_0 && !HttpHeaders.Values.KEEP_ALIVE.equalsIgnoreCase(responseConnectionHeader)) {
         // In the HTTP/1.0 case both request/response need a keep-alive connection header the connection to be persistent
         // currently Vertx forces the Connection header if keepalive is enabled for 1.0
+        close = true;
+      } else if (reqBodyIncomplete) {
         close = true;
       }
       pool.responseEnded(this, close);
@@ -525,7 +528,7 @@ class ClientConnection extends ConnectionBase implements HttpClientConnection, H
     this.requests.add(req);
   }
 
-  public synchronized void endRequest() {
+  public synchronized void endRequest(boolean reqBodyComplete) {
     if (currentRequest == null) {
       throw new IllegalStateException("No write in progress");
     }
@@ -533,7 +536,7 @@ class ClientConnection extends ConnectionBase implements HttpClientConnection, H
       metrics.requestEnd(currentRequest.metric());
     }
     currentRequest = null;
-    pool.requestEnded(this);
+    pool.requestEnded(this, reqBodyComplete, requests.isEmpty() && currentResponse == null);
   }
 
   @Override

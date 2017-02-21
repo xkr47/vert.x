@@ -71,6 +71,7 @@ public class HttpClientRequestImpl extends HttpClientRequestBase implements Http
   private boolean writeHead;
   private long written;
   private CaseInsensitiveHeaders headers;
+  private boolean reqBodyIncomplete;
 
   HttpClientRequestImpl(HttpClientImpl client, io.vertx.core.http.HttpMethod method, String host, int port,
                         boolean ssl, String relativeURI, VertxInternal vertx) {
@@ -639,11 +640,7 @@ public class HttpClientRequestImpl extends HttpClientRequestBase implements Http
           // we also need to write the head so optimize this and write all out in once
           writeHeadWithContent(pending, true);
 
-          conn.reportBytesWritten(written);
-
-          if (respHandler != null) {
-            this.stream.endRequest();
-          }
+          reportAndEndRequest();
         } else {
           writeHeadWithContent(pending, false);
           if (headersCompletionHandler != null) {
@@ -655,11 +652,7 @@ public class HttpClientRequestImpl extends HttpClientRequestBase implements Http
           // we also need to write the head so optimize this and write all out in once
           writeHeadWithContent(null, true);
 
-          conn.reportBytesWritten(written);
-
-          if (respHandler != null) {
-            this.stream.endRequest();
-          }
+          reportAndEndRequest();
         } else {
           if (writeHead) {
             writeHead();
@@ -743,12 +736,23 @@ public class HttpClientRequestImpl extends HttpClientRequestBase implements Http
         stream.writeBuffer(buff, end);
       }
       if (end) {
-        stream.connection().reportBytesWritten(written);
-
-        if (respHandler != null) {
-          stream.endRequest();
-        }
+        reportAndEndRequest();
       }
+    }
+  }
+
+  private void reportAndEndRequest() {
+    stream.connection().reportBytesWritten(written);
+
+    if (respHandler != null) {
+      reqBodyIncomplete = !chunked && Long.parseLong(headers.get(CONTENT_LENGTH)) != written;
+      stream.endRequest(reqBodyIncomplete);
+    }
+  }
+
+  boolean isReqBodyIncomplete() {
+    synchronized (getLock()) {
+      return reqBodyIncomplete;
     }
   }
 
