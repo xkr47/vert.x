@@ -95,7 +95,14 @@ public class Http1xPool implements ConnectionManager.Pool<ClientConnection> {
     }
   }
 
-  void requestEnded(ClientConnection conn) {
+  void requestEnded(ClientConnection conn, boolean reqBodyIncomplete, boolean allPendingResponsesCompleted) {
+    if (reqBodyIncomplete) {
+      // incomplete body sent; this connection should never be reused
+      if (allPendingResponsesCompleted) {
+        conn.close();
+      }
+      return;
+    }
     ContextImpl context = conn.getContext();
     context.runOnContext(v -> {
       if (pipelining && conn.getOutstandingRequestCount() < pipeliningLimit) {

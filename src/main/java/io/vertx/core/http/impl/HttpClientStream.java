@@ -56,7 +56,7 @@ interface HttpClientStream {
   void resetResponse(long code);
 
   void beginRequest(HttpClientRequestImpl request);
-  void endRequest();
+  void endRequest(boolean reqBodyComplete);
 
   NetSocket createNetSocket();
 }
