@@ -362,7 +362,7 @@ class Http2ClientConnection extends Http2ConnectionBase implements HttpClientCon
     }
 
     @Override
-    public void endRequest() {
+    public void endRequest(boolean reqBodyIncomplete) {
       if (conn.metrics.isEnabled()) {
         conn.metrics.requestEnd(request.metric());
       }

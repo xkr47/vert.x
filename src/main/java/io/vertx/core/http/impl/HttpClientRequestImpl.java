@@ -744,7 +744,8 @@ public class HttpClientRequestImpl extends HttpClientRequestBase implements Http
   private void reportAndEndRequest() {
     stream.connection().reportBytesWritten(written);
     if (respHandler != null) {
-      reqBodyIncomplete = !chunked && Long.parseLong(headers.get(CONTENT_LENGTH)) != written;
+      String expectedLength;
+      reqBodyIncomplete = !chunked && headers != null && null != (expectedLength = headers != null ? headers.get(CONTENT_LENGTH) : null) && Long.parseLong(expectedLength) != written;
       stream.endRequest(reqBodyIncomplete);
     }
   }
