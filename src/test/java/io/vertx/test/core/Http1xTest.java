@@ -2612,6 +2612,7 @@ public class Http1xTest extends HttpTest {
             .continueHandler(v -> clientRequest.fail("Unexpected 100 continue"))
             .connectionHandler(c -> clientConnection.complete())
             .endHandler(v -> clientRequest.complete())
+            .putHeader("content-length", Integer.toString(1000 + id))
             .end(REQ);
         return fut;
       }
