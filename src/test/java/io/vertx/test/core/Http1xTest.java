@@ -2592,12 +2592,21 @@ public class Http1xTest extends HttpTest {
 
       CompositeFuture all() {
         return CompositeFuture.all(
-            serverRequest.map(s -> {assertThat(s, is(REQ));return null;}),
-            serverResponse,
-            clientConnection,
-            clientRequest,
-            clientResponse.map(s -> {assertThat(s, is(RES));return null;})
+            deb("serverRequest", serverRequest).map(s -> {assertThat(s, is(REQ));return null;}),
+            deb("serverResponse", serverResponse),
+            deb("clientConnection", clientConnection),
+            deb("clientRequest", clientRequest),
+            deb("clientResponse", clientResponse).map(s -> {assertThat(s, is(RES));return null;})
         );
+      }
+
+      private <T> Future<T> deb(String s, Future<T> in) {
+        Future<T> out = future();
+        in.setHandler(ar -> {
+          System.out.println(hashCode() + " / " + s + ": " + (ar.succeeded() ? "OK " + ar.result() : "FAIL " + ar.cause()));
+          out.handle(ar);
+        });
+        return out;
       }
 
       Future sendReq(int id) {
@@ -2628,7 +2637,7 @@ public class Http1xTest extends HttpTest {
       res.exceptionHandler(t -> s.serverResponse.fail(t))
           .closeHandler(v -> s.serverResponse.fail("Server response premature close"))
           .bodyEndHandler(v -> s.serverResponse.complete());
-      vertx.setTimer(300, l -> res.setStatusCode(200).end(s.RES));
+      vertx.setTimer(1000, l -> res.setStatusCode(200).end(s.RES));
     });
     server.listen(DEFAULT_HTTP_PORT, r -> ss[0].sendReq(0).setHandler(t -> ss[1].sendReq(1)));
     waitFor(1);
